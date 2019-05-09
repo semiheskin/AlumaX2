@@ -9,13 +9,13 @@
 
 #define DEVICE_DRIVER_INFO_STRING "DL Aluma"
 
-AlumaX2* AlumaX2::GetInstance(SleeperInterface* pSleeper, MutexInterface* pIOMutex)
+AlumaX2* AlumaX2::GetInstance(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex)
 {
-	static auto instance = new AlumaX2{ pSleeper, pIOMutex };
+	static auto instance = new AlumaX2{ pSleeper, pLoggerIn, pIOMutex };
 	return instance;
 }
 
-AlumaX2::AlumaX2(SleeperInterface* pSleeper, MutexInterface* pIOMutex) : m_sleeper(pSleeper), m_mutex(pIOMutex)
+AlumaX2::AlumaX2(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex) : m_sleeper(pSleeper), m_logger(pLoggerIn), m_mutex(pIOMutex)
 {
 }
 
@@ -103,7 +103,7 @@ int AlumaX2::CCEstablishLink(enumLPTPort portLPT, const enumWhichCCD& CCD, enumC
 	m_cameraPtr->initialize();
 
 	auto sensor = m_cameraPtr->getSensor(0);
-	sensor->setSetting(dl::ISensor::AutoFanMode, 1);
+	HandlePromise(sensor->setSetting(dl::ISensor::AutoFanMode, 1));
 
 	m_filterWheelPtr = m_cameraPtr->getFW();
 	if (m_filterWheelPtr != nullptr)
@@ -128,7 +128,7 @@ int AlumaX2::CCDisconnect(const bool bShutDownTemp)
 	return SB_OK;
 }
 
-int AlumaX2::CCGetChipSize(const enumCameraIndex & Camera, const enumWhichCCD & CCD, const int& nXBin, const int& nYBin,
+int AlumaX2::CCGetChipSize(const enumCameraIndex& Camera, const enumWhichCCD& CCD, const int& nXBin, const int& nYBin,
 	const bool& bOffChipBinning, int& nW, int& nH, int& nReadOut)
 {
 	X2MutexLocker locker(GetMutex());
@@ -215,9 +215,7 @@ int AlumaX2::CCStartExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD
 	options.useRBIPreflash = false;
 	options.useExtTrigger = false;
 
-	HandlePromise(m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->startExposure(options));
-
-	return SB_OK;
+	return HandlePromise(m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->startExposure(options));
 }
 
 int AlumaX2::CCIsExposureComplete(const enumCameraIndex & Cam, const enumWhichCCD CCD, bool* pbComplete,
@@ -225,12 +223,17 @@ int AlumaX2::CCIsExposureComplete(const enumCameraIndex & Cam, const enumWhichCC
 {
 	X2MutexLocker locker(GetMutex());
 
-	auto status = GetCameraStatus();
+	dl::ICamera::Status status;
+	const auto result = GetCameraStatus(status);
+
+	if (result != SB_OK)
+		return result;
+
 	const auto sensorStatus = (ConvertCCDtoSensorId(CCD) == 0) ? status.mainSensorState : status.extSensorState;
 
 	*pbComplete = sensorStatus == dl::ISensor::ReadyToDownload;
 
-	return SB_OK;
+	return result;
 }
 
 int AlumaX2::CCEndExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD, const bool& bWasAborted,
@@ -240,7 +243,7 @@ int AlumaX2::CCEndExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD, 
 
 	if (bWasAborted)
 	{
-		m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->abortExposure();
+		return HandlePromise(m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->abortExposure());
 	}
 
 	return SB_OK;
@@ -289,9 +292,7 @@ int AlumaX2::CCRegulateTemp(const bool& bOn, const double& dTemp)
 	X2MutexLocker locker(GetMutex());
 
 	const auto tec = m_cameraPtr->getTEC();
-	HandlePromise(tec->setState(bOn, static_cast<float>(dTemp)));
-
-	return SB_OK;
+	return HandlePromise(tec->setState(bOn, static_cast<float>(dTemp)));
 }
 
 int AlumaX2::CCQueryTemperature(double& dCurTemp, double& dCurPower, char* lpszPower, const int nMaxLen,
@@ -299,23 +300,20 @@ int AlumaX2::CCQueryTemperature(double& dCurTemp, double& dCurPower, char* lpszP
 {
 	X2MutexLocker locker(GetMutex());
 
-	try
-	{
-		const auto status = GetCameraStatus();
+	dl::ICamera::Status status;
+	const auto result = GetCameraStatus(status);
 
-		dCurTemp = status.sensorTemperature;
-		dCurPower = status.coolerPower;
+	if (result != SB_OK)
+		return result;
 
-		const auto tec = m_cameraPtr->getTEC();
-		bCurEnabled = tec->getEnabled();
-		dCurSetPoint = tec->getSetpoint();
-	}
-	catch (const std::exception & ex)
-	{
-		//TODO: Log		
-	}
+	dCurTemp = status.sensorTemperature;
+	dCurPower = status.coolerPower;
 
-	return SB_OK;
+	const auto tec = m_cameraPtr->getTEC();
+	bCurEnabled = tec->getEnabled();
+	dCurSetPoint = tec->getSetpoint();
+
+	return result;
 }
 
 int AlumaX2::CCGetRecommendedSetpoint(double& dRecSP)
@@ -395,7 +393,7 @@ int AlumaX2::startFilterWheelMoveTo(const int& nTargetPosition)
 {
 	X2MutexLocker locker(GetMutex());
 
-	m_filterWheelPtr->setPosition(nTargetPosition + 1);
+	HandlePromise(m_filterWheelPtr->setPosition(nTargetPosition + 1));
 
 	return SB_OK;
 }
@@ -404,7 +402,11 @@ int AlumaX2::isCompleteFilterWheelMoveTo(bool& bComplete) const
 {
 	X2MutexLocker locker(GetMutex());
 
-	HandlePromise(m_filterWheelPtr->queryStatus());
+	const auto result = HandlePromise(m_filterWheelPtr->queryStatus());
+
+	if (result != SB_OK)
+		return result;
+
 	bComplete = m_filterWheelPtr->getStatus() == m_filterWheelPtr->FWIdle;
 
 	return SB_OK;
@@ -429,13 +431,18 @@ void AlumaX2::embeddedFilterWheelInit(const char* psFilterWheelSelection)
 
 
 //Helpers
-dl::ICamera::Status AlumaX2::GetCameraStatus() const
+int AlumaX2::GetCameraStatus(dl::ICamera::Status & status) const
 {
-	HandlePromise(m_cameraPtr->queryStatus());
-	return m_cameraPtr->getStatus();
+	const auto result = HandlePromise(m_cameraPtr->queryStatus());
+
+	if (result != SB_OK)
+		return result;
+
+	status = m_cameraPtr->getStatus();
+	return result;
 }
 
-void AlumaX2::HandlePromise(const dl::IPromisePtr & promise)
+int AlumaX2::HandlePromise(const dl::IPromisePtr & promise) const
 {
 	const auto result = promise->wait();
 	if (result != dl::IPromise::Complete)
@@ -444,9 +451,13 @@ void AlumaX2::HandlePromise(const dl::IPromisePtr & promise)
 		size_t lng = 512;
 		promise->getLastError(&(buf[0]), lng);
 		promise->release();
-		throw std::logic_error(std::string(&(buf[0]), lng));
+
+		m_logger->out(std::string(&(buf[0]), lng).c_str());
+		return ERR_CMDFAILED;
 	}
 	promise->release();
+
+	return SB_OK;
 }
 
 bool AlumaX2::IsTransferCompleted(const dl::IPromisePtr & promise)

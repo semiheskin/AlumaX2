@@ -3,6 +3,7 @@
 #include <cameradriverinterface.h>
 #include <filterwheelmovetointerface.h>
 #include <sleeperinterface.h>
+#include <loggerinterface.h>
 
 #include <dlapi.h>
 
@@ -25,10 +26,10 @@ public:
 	AlumaX2(AlumaX2 const&) = delete;
 	void operator=(AlumaX2 const&) = delete;
 
-	static AlumaX2* GetInstance(SleeperInterface* pSleeper, MutexInterface* pIOMutex);
+	static AlumaX2* GetInstance(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
 
 private:
-	AlumaX2(SleeperInterface* pSleeper, MutexInterface* pIOMutex);
+	AlumaX2(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
 	~AlumaX2();
 
 public:
@@ -87,6 +88,7 @@ public:
 
 private:
 	SleeperInterface* m_sleeper;
+	LoggerInterface* m_logger;
 	MutexInterface* m_mutex;
 
 	std::shared_ptr<dl::IGateway> m_gateway;
@@ -101,8 +103,8 @@ private:
 	MutexInterface* GetMutex() const { return m_mutex; };
 	bool GetFlipSensors() const { return m_flipSensors; };
 
-	dl::ICamera::Status GetCameraStatus() const;
-	static void HandlePromise(const dl::IPromisePtr& promise);
+	int GetCameraStatus(dl::ICamera::Status& status) const;
+	int HandlePromise(const dl::IPromisePtr& promise) const;
 	static bool IsTransferCompleted(const dl::IPromisePtr& promise);
 	unsigned int ConvertCCDtoSensorId(const enumWhichCCD& CCD) const;
 };
