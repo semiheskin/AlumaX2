@@ -27,21 +27,23 @@ extern "C" PlugInExport int sbPlugInFactory2(
 	TickCountInterface* pTickCountIn,
 	void** ppObjectOut)
 {
-	*ppObjectOut = nullptr;
-	AlumaX2* gpMyImpl = nullptr;
+	//*ppObjectOut = nullptr;
+	//AlumaX2* gpMyImpl = nullptr;
 
-	if (nullptr == gpMyImpl)
-		gpMyImpl = new AlumaX2(pszSelection,
-			nInstanceIndex,
-			pSerXIn,
-			pTheSkyXIn,
-			pSleeperIn,
-			pIniUtilIn,
-			pLoggerIn,
-			pIOMutexIn,
-			pTickCountIn);
+	//if (nullptr == gpMyImpl)
+	//	gpMyImpl = new AlumaX2(pszSelection,
+	//		nInstanceIndex,
+	//		pSerXIn,
+	//		pTheSkyXIn,
+	//		pSleeperIn,
+	//		pIniUtilIn,
+	//		pLoggerIn,
+	//		pIOMutexIn,
+	//		pTickCountIn);
 
-	*ppObjectOut = gpMyImpl;
+	//*ppObjectOut = gpMyImpl;
+
+	* ppObjectOut = AlumaX2::GetInstance(pSleeperIn, pIOMutexIn);
 
 	return 0;
 }

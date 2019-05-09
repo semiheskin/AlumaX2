@@ -9,19 +9,14 @@
 
 #define DEVICE_DRIVER_INFO_STRING "DL Aluma"
 
-
-AlumaX2::AlumaX2(
-	const char* pszSelectionString,
-	const int& nISIndex,
-	SerXInterface* pSerX,
-	TheSkyXFacadeForDriversInterface* pTheSkyXForMounts,
-	SleeperInterface* pSleeper,
-	BasicIniUtilInterface* pIniUtil,
-	LoggerInterface* pLogger,
-	MutexInterface* pIOMutex,
-	TickCountInterface* pTickCount) : m_sleeper(pSleeper), m_mutex(pIOMutex)
+AlumaX2* AlumaX2::GetInstance(SleeperInterface* pSleeper, MutexInterface* pIOMutex)
 {
+	static auto instance = new AlumaX2{ pSleeper, pIOMutex };
+	return instance;
+}
 
+AlumaX2::AlumaX2(SleeperInterface* pSleeper, MutexInterface* pIOMutex) : m_sleeper(pSleeper), m_mutex(pIOMutex)
+{
 }
 
 AlumaX2::~AlumaX2()
@@ -98,6 +93,9 @@ int AlumaX2::CCEstablishLink(enumLPTPort portLPT, const enumWhichCCD& CCD, enumC
 {
 	X2MutexLocker locker(GetMutex());
 
+	if (m_bLinked)
+		return SB_OK;
+
 	m_gateway.reset(dl::getGateway(), [](dl::IGateway * gw) { dl::deleteGateway(gw); });
 
 	m_gateway->queryUSBCameras();
@@ -130,7 +128,7 @@ int AlumaX2::CCDisconnect(const bool bShutDownTemp)
 	return SB_OK;
 }
 
-int AlumaX2::CCGetChipSize(const enumCameraIndex& Camera, const enumWhichCCD& CCD, const int& nXBin, const int& nYBin,
+int AlumaX2::CCGetChipSize(const enumCameraIndex & Camera, const enumWhichCCD & CCD, const int& nXBin, const int& nYBin,
 	const bool& bOffChipBinning, int& nW, int& nH, int& nReadOut)
 {
 	X2MutexLocker locker(GetMutex());
@@ -145,6 +143,13 @@ int AlumaX2::CCGetChipSize(const enumCameraIndex& Camera, const enumWhichCCD& CC
 int AlumaX2::CCGetNumBins(const enumCameraIndex & Camera, const enumWhichCCD & CCD, int& nNumBins)
 {
 	X2MutexLocker locker(GetMutex());
+
+	if (m_cameraPtr == nullptr)
+		return ERR_NOLINK;
+
+	const auto sensorInfo = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->getInfo();
+	nNumBins = static_cast<int>(sensorInfo.maxBinX);
+
 	return SB_OK;
 }
 
@@ -152,6 +157,17 @@ int AlumaX2::CCGetBinSizeFromIndex(const enumCameraIndex & Camera, const enumWhi
 	long& nBincx, long& nBincy)
 {
 	X2MutexLocker locker(GetMutex());
+
+	switch (nIndex)
+	{
+	case 0:		nBincx = nBincy = 1; break;
+	case 1:		nBincx = nBincy = 2; break;
+	case 2:		nBincx = nBincy = 3; break;
+	case 3:		nBincx = nBincy = 4; break;
+	case 4:		nBincx = nBincy = 5; break;
+	default:	nBincx = nBincy = 1; break;
+	}
+
 	return SB_OK;
 }
 
@@ -164,6 +180,8 @@ int AlumaX2::CCSetBinnedSubFrame(const enumCameraIndex & Camera, const enumWhich
 
 void AlumaX2::CCMakeExposureState(int* pnState, enumCameraIndex Cam, int nXBin, int nYBin, int abg, bool bRapidReadout)
 {
+	m_binX = nXBin;
+	m_binY = nYBin;
 }
 
 int AlumaX2::CCStartExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD, const double& dTime,
@@ -190,8 +208,8 @@ int AlumaX2::CCStartExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD
 
 	dl::TExposureOptions options{};
 	options.duration = static_cast<float>(dTime);
-	options.binX = 1;
-	options.binY = 1;
+	options.binX = m_binX;
+	options.binY = m_binY;
 	options.readoutMode = 0;
 	options.isLightFrame = isLightFrame;
 	options.useRBIPreflash = false;
@@ -423,7 +441,7 @@ void AlumaX2::HandlePromise(const dl::IPromisePtr & promise)
 	if (result != dl::IPromise::Complete)
 	{
 		char buf[512] = { 0 };
-		size_t lng = 512; // this variable will be resized to the length of the error message
+		size_t lng = 512;
 		promise->getLastError(&(buf[0]), lng);
 		promise->release();
 		throw std::logic_error(std::string(&(buf[0]), lng));

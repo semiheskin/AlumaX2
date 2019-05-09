@@ -20,19 +20,18 @@ class TickCountInterface;
 
 class AlumaX2 : public CameraDriverInterface, public FilterWheelMoveToInterface
 {
-public:
-	AlumaX2(
-		const char* pszSelectionString,
-		const int& nISIndex,
-		SerXInterface* pSerX,
-		TheSkyXFacadeForDriversInterface* pTheSkyXForMounts,
-		SleeperInterface* pSleeper,
-		BasicIniUtilInterface* pIniUtil,
-		LoggerInterface* pLogger,
-		MutexInterface* pIOMutex,
-		TickCountInterface* pTickCount);
 
+public:
+	AlumaX2(AlumaX2 const&) = delete;
+	void operator=(AlumaX2 const&) = delete;
+
+	static AlumaX2* GetInstance(SleeperInterface* pSleeper, MutexInterface* pIOMutex);
+
+private:
+	AlumaX2(SleeperInterface* pSleeper, MutexInterface* pIOMutex);
 	~AlumaX2();
+
+public:
 
 	//DriverRootInterface
 	int queryAbstraction(const char* pszName, void** ppVal) override;
@@ -95,6 +94,9 @@ private:
 	dl::IFWPtr m_filterWheelPtr;
 
 	bool m_flipSensors{ false };
+
+	unsigned char m_binX{ 1 };
+	unsigned char m_binY{ 1 };
 
 	MutexInterface* GetMutex() const { return m_mutex; };
 	bool GetFlipSensors() const { return m_flipSensors; };
