@@ -1,0 +1,3 @@
+//See hardwarelist.txt for details on this file format.
+//Version|Manufacturer|Model|Comment|MapsTo|PlugInDllName|ForX2Only|Windows|Mac|Linux
+2|Diffraction Limited|FW-8G Aluma||Camera's Filter Wheel|libAluma|||||

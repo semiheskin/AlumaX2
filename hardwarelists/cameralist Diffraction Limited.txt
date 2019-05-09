@@ -1,0 +1,3 @@
+//See hardwarelist.txt for details on this file format.
+//Version|Manufacturer|Model|Comment|MapsTo|PlugInDllName
+2|Diffraction Limited|Aluma Series|Connect to an Aluma Series camera| |libAluma||1|1|1|
