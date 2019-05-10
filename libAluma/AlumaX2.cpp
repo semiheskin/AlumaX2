@@ -32,6 +32,8 @@ int AlumaX2::queryAbstraction(const char* pszName, void** ppVal)
 
 	if (!strcmp(pszName, FilterWheelMoveToInterface_Name))
 		* ppVal = dynamic_cast<FilterWheelMoveToInterface*>(this);
+	else if (!strcmp(pszName, SubframeInterface_Name))
+		* ppVal = dynamic_cast<SubframeInterface*>(this);
 
 	return SB_OK;
 }
@@ -104,6 +106,7 @@ int AlumaX2::CCEstablishLink(enumLPTPort portLPT, const enumWhichCCD& CCD, enumC
 
 	auto sensor = m_cameraPtr->getSensor(0);
 	HandlePromise(sensor->setSetting(dl::ISensor::AutoFanMode, 1));
+	HandlePromise(sensor->setSetting(dl::ISensor::UseOverscan, 0));
 
 	m_filterWheelPtr = m_cameraPtr->getFW();
 	if (m_filterWheelPtr != nullptr)
@@ -137,10 +140,22 @@ int AlumaX2::CCGetChipSize(const enumCameraIndex& Camera, const enumWhichCCD& CC
 	nW = static_cast<int>(sensorInfo.pixelsX / nXBin);
 	nH = static_cast<int>(sensorInfo.pixelsY / nYBin);
 
+	if (CCD == enumWhichCCD::CCD_IMAGER)
+	{
+		m_imagerBinX = nXBin;
+		m_imagerBinY = nYBin;
+	}
+	else if (CCD == enumWhichCCD::CCD_GUIDER)
+	{
+		m_guiderBinX = nXBin;
+		m_guiderBinY = nYBin;
+	}
+
+
 	return SB_OK;
 }
 
-int AlumaX2::CCGetNumBins(const enumCameraIndex & Camera, const enumWhichCCD & CCD, int& nNumBins)
+int AlumaX2::CCGetNumBins(const enumCameraIndex& Camera, const enumWhichCCD& CCD, int& nNumBins)
 {
 	X2MutexLocker locker(GetMutex());
 
@@ -175,13 +190,33 @@ int AlumaX2::CCSetBinnedSubFrame(const enumCameraIndex & Camera, const enumWhich
 	const int& nTop, const int& nRight, const int& nBottom)
 {
 	X2MutexLocker locker(GetMutex());
+
+	//const auto sensor = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD));
+	//const auto sensorInfo = sensor->getInfo();
+
+	//auto width = static_cast<int>(sensorInfo.pixelsX - 1) - (nLeft + nRight);
+	//auto height = static_cast<int>(sensorInfo.pixelsY - 1) - (nTop + nBottom);
+
+	//if (width == 0)
+	//{
+	//	width = sensorInfo.pixelsX;
+	//}
+
+	//if (height == 0)
+	//{
+	//	height = sensorInfo.pixelsY;
+	//}
+
+	//const dl::TSubframe subFrame{ nTop, nLeft, width, height, m_binX, m_binY };
+
+	//return HandlePromise(sensor->setSubframe(subFrame));
+
 	return SB_OK;
 }
 
 void AlumaX2::CCMakeExposureState(int* pnState, enumCameraIndex Cam, int nXBin, int nYBin, int abg, bool bRapidReadout)
 {
-	m_binX = nXBin;
-	m_binY = nYBin;
+
 }
 
 int AlumaX2::CCStartExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD, const double& dTime,
@@ -208,8 +243,8 @@ int AlumaX2::CCStartExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD
 
 	dl::TExposureOptions options{};
 	options.duration = static_cast<float>(dTime);
-	options.binX = m_binX;
-	options.binY = m_binY;
+	options.binX = CCD == enumWhichCCD::CCD_IMAGER ? m_imagerBinX : m_guiderBinX;
+	options.binY = CCD == enumWhichCCD::CCD_IMAGER ? m_imagerBinY : m_guiderBinY;
 	options.readoutMode = 0;
 	options.isLightFrame = isLightFrame;
 	options.useRBIPreflash = false;
@@ -246,6 +281,13 @@ int AlumaX2::CCEndExposure(const enumCameraIndex & Cam, const enumWhichCCD CCD, 
 		return HandlePromise(m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD))->abortExposure());
 	}
 
+	const auto sensor = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD));
+	const auto promise = sensor->startDownload();
+	while (!IsTransferCompleted(promise))
+	{
+		m_sleeper->sleep(5);
+	}
+
 	return SB_OK;
 }
 
@@ -260,7 +302,7 @@ int AlumaX2::CCDumpLines(const enumCameraIndex & Cam, const enumWhichCCD & CCD, 
 	const unsigned& lines)
 {
 	X2MutexLocker locker(GetMutex());
-	return ERR_NOT_IMPL;
+	return SB_OK;
 }
 
 int AlumaX2::CCReadoutImage(const enumCameraIndex & Cam, const enumWhichCCD & CCD, const int& nWidth, const int& nHeight,
@@ -270,14 +312,7 @@ int AlumaX2::CCReadoutImage(const enumCameraIndex & Cam, const enumWhichCCD & CC
 
 	const auto sensor = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD));
 
-	const auto promise = sensor->startDownload();
-	while (!IsTransferCompleted(promise))
-	{
-		m_sleeper->sleep(5);
-	}
-
 	const auto bufferLength = nWidth * nHeight;
-
 	const auto image = sensor->getImage();
 	const auto imageBuffer = image->getBufferData();
 	const auto copyLength = sizeof(unsigned short) * bufferLength;
@@ -377,6 +412,45 @@ void AlumaX2::CCAfterDownload(const enumCameraIndex & Cam, const enumWhichCCD & 
 
 	//Wait for the camera driver to cleanup
 	m_sleeper->sleep(100);
+}
+
+int AlumaX2::CCSetBinnedSubFrame3(const enumCameraIndex & Camera, const enumWhichCCD & CCDOrig, const int& nLeft,
+	const int& nTop, const int& nWidth, const int& nHeight)
+{
+	X2MutexLocker locker(GetMutex());
+
+
+	const auto sensor = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCDOrig));
+	const auto sensorInfo = sensor->getInfo();
+
+	const dl::TSubframe subFrame
+	{ 
+		nTop,
+		nLeft,
+		nWidth,
+		nHeight,
+		CCDOrig == enumWhichCCD::CCD_IMAGER ? m_imagerBinX : m_guiderBinX,
+		CCDOrig == enumWhichCCD::CCD_IMAGER ? m_imagerBinY : m_guiderBinY
+	};
+
+	return HandlePromise(sensor->setSubframe(subFrame));
+
+	//auto width = static_cast<int>(sensorInfo.pixelsX - 1) - (nLeft + nRight);
+	//auto height = static_cast<int>(sensorInfo.pixelsY - 1) - (nTop + nBottom);
+
+	//if (width == 0)
+	//{
+	//	width = sensorInfo.pixelsX;
+	//}
+
+	//if (height == 0)
+	//{
+	//	height = sensorInfo.pixelsY;
+	//}
+
+	//const dl::TSubframe subFrame{ nTop, nLeft, width, height, m_binX, m_binY };
+
+	//return HandlePromise(sensor->setSubframe(subFrame));
 }
 
 //FilterWheelMoveToInterface

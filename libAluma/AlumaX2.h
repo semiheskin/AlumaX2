@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cameradriverinterface.h>
+#include <subframeinterface.h>
 #include <filterwheelmovetointerface.h>
 #include <sleeperinterface.h>
 #include <loggerinterface.h>
@@ -19,7 +20,7 @@ class MutexInterface;
 class TickCountInterface;
 
 
-class AlumaX2 : public CameraDriverInterface, public FilterWheelMoveToInterface
+class AlumaX2 : public CameraDriverInterface, public SubframeInterface, public FilterWheelMoveToInterface
 {
 
 public:
@@ -77,6 +78,9 @@ public:
 	void CCBeforeDownload(const enumCameraIndex& Cam, const enumWhichCCD& CCD) override;
 	void CCAfterDownload(const enumCameraIndex& Cam, const enumWhichCCD& CCD) override;
 
+	//SubframeInterface
+	int CCSetBinnedSubFrame3(const enumCameraIndex& Camera, const enumWhichCCD& CCDOrig, const int& nLeft, const int& nTop, const int& nWidth, const int& nHeight) override;
+
 	//FilterWheelMoveToInterface
 	int filterCount(int& nCount) override;
 	int startFilterWheelMoveTo(const int& nTargetPosition)	override;
@@ -97,8 +101,10 @@ private:
 
 	bool m_flipSensors{ false };
 
-	unsigned char m_binX{ 1 };
-	unsigned char m_binY{ 1 };
+	unsigned char m_imagerBinX{ 1 };
+	unsigned char m_imagerBinY{ 1 };
+	unsigned char m_guiderBinX{ 1 };
+	unsigned char m_guiderBinY{ 1 };
 
 	MutexInterface* GetMutex() const { return m_mutex; };
 	bool GetFlipSensors() const { return m_flipSensors; };
