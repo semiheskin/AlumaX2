@@ -190,27 +190,6 @@ int AlumaX2::CCSetBinnedSubFrame(const enumCameraIndex & Camera, const enumWhich
 	const int& nTop, const int& nRight, const int& nBottom)
 {
 	X2MutexLocker locker(GetMutex());
-
-	//const auto sensor = m_cameraPtr->getSensor(ConvertCCDtoSensorId(CCD));
-	//const auto sensorInfo = sensor->getInfo();
-
-	//auto width = static_cast<int>(sensorInfo.pixelsX - 1) - (nLeft + nRight);
-	//auto height = static_cast<int>(sensorInfo.pixelsY - 1) - (nTop + nBottom);
-
-	//if (width == 0)
-	//{
-	//	width = sensorInfo.pixelsX;
-	//}
-
-	//if (height == 0)
-	//{
-	//	height = sensorInfo.pixelsY;
-	//}
-
-	//const dl::TSubframe subFrame{ nTop, nLeft, width, height, m_binX, m_binY };
-
-	//return HandlePromise(sensor->setSubframe(subFrame));
-
 	return SB_OK;
 }
 
@@ -434,23 +413,6 @@ int AlumaX2::CCSetBinnedSubFrame3(const enumCameraIndex & Camera, const enumWhic
 	};
 
 	return HandlePromise(sensor->setSubframe(subFrame));
-
-	//auto width = static_cast<int>(sensorInfo.pixelsX - 1) - (nLeft + nRight);
-	//auto height = static_cast<int>(sensorInfo.pixelsY - 1) - (nTop + nBottom);
-
-	//if (width == 0)
-	//{
-	//	width = sensorInfo.pixelsX;
-	//}
-
-	//if (height == 0)
-	//{
-	//	height = sensorInfo.pixelsY;
-	//}
-
-	//const dl::TSubframe subFrame{ nTop, nLeft, width, height, m_binX, m_binY };
-
-	//return HandlePromise(sensor->setSubframe(subFrame));
 }
 
 //FilterWheelMoveToInterface
