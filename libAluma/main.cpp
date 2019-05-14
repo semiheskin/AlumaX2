@@ -43,7 +43,7 @@ extern "C" PlugInExport int sbPlugInFactory2(
 
 	//*ppObjectOut = gpMyImpl;
 
-	* ppObjectOut = AlumaX2::GetInstance(pSleeperIn, pLoggerIn, pIOMutexIn);
+	* ppObjectOut = AlumaX2::GetInstance(nInstanceIndex, pTheSkyXIn, pSleeperIn, pIniUtilIn, pLoggerIn, pIOMutexIn);
 
 	return 0;
 }

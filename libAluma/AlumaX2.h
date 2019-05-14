@@ -1,9 +1,14 @@
 #pragma once
 
+#include <stdio.h>
+
 #include <cameradriverinterface.h>
 #include <subframeinterface.h>
 #include <filterwheelmovetointerface.h>
+#include <modalsettingsdialoginterface.h>
+#include <x2guiinterface.h>
 #include <sleeperinterface.h>
+#include <basiciniutilinterface.h>
 #include <loggerinterface.h>
 
 #include <dlapi.h>
@@ -20,17 +25,17 @@ class MutexInterface;
 class TickCountInterface;
 
 
-class AlumaX2 : public CameraDriverInterface, public SubframeInterface, public FilterWheelMoveToInterface
+class AlumaX2 : public CameraDriverInterface, public SubframeInterface, public FilterWheelMoveToInterface, public ModalSettingsDialogInterface, public X2GUIEventInterface
 {
 
 public:
 	AlumaX2(AlumaX2 const&) = delete;
 	void operator=(AlumaX2 const&) = delete;
 
-	static AlumaX2* GetInstance(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
+	static AlumaX2* GetInstance(const int& nISIndex, TheSkyXFacadeForDriversInterface* pTheSkyXForMounts, SleeperInterface* pSleeper, BasicIniUtilInterface* pIniUtilIn, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
 
 private:
-	AlumaX2(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
+	AlumaX2(const int& nISIndex, TheSkyXFacadeForDriversInterface* pTheSkyXForMounts, SleeperInterface* pSleeper, BasicIniUtilInterface* pIniUtilIn, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex);
 	~AlumaX2();
 
 public:
@@ -89,11 +94,32 @@ public:
 	int abortFilterWheelMoveTo() override;
 	void embeddedFilterWheelInit(const char* psFilterWheelSelection) override;
 
+	//ModalSettingsDialogInterface
+	int initModalSettingsDialog() override;
+	int execModalSettingsDialog() override;
+
+	//X2GUIEventInterface
+	void uiEvent(X2GUIExchangeInterface* uiex, const char* pszEvent) override;
+
 
 private:
+	int m_isIndex;
+	TheSkyXFacadeForDriversInterface* m_theSkyXFacade;
 	SleeperInterface* m_sleeper;
+	BasicIniUtilInterface* m_iniUtil;
 	LoggerInterface* m_logger;
 	MutexInterface* m_mutex;
+
+	//Settings
+	//int m_autoFanMode;
+	//int m_useOverscan;
+
+	int GetAutoFanMode() const;
+	void SetAutoFanMode(const int& autoFanMode) const;
+
+	int GetUseOverscan() const;
+	void SetUseOverscan(const int& useOverscan) const;
+
 
 	std::shared_ptr<dl::IGateway> m_gateway;
 	dl::ICameraPtr m_cameraPtr;

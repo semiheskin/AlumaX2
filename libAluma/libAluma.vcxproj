@@ -27,6 +27,9 @@
     <ClInclude Include="main.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="alumax2.ui">
+      <DeploymentContent>false</DeploymentContent>
+    </None>
     <None Include="CopyDriver.bat" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -116,7 +119,8 @@
       <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\dlapi_win\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>$(MSBuildProjectDirectory)\CopyDriver.bat $(OutputPath)$(TargetFileName)</Command>
+      <Command>$(MSBuildProjectDirectory)\CopyDriver.bat $(OutputPath)$(TargetFileName) $(ProjectDir)alumax2.ui
+</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -157,7 +161,8 @@
       <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\dlapi_win\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>$(MSBuildProjectDirectory)\CopyDriver.bat $(OutputPath)$(TargetFileName)</Command>
+      <Command>$(MSBuildProjectDirectory)\CopyDriver.bat $(OutputPath)$(TargetFileName) $(ProjectDir)alumax2.ui
+</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

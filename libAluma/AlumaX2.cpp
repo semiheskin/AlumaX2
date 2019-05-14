@@ -3,25 +3,45 @@
 #include <mutexinterface.h>
 #include <basicstringinterface.h>
 #include <sberrorx.h>
+#include <x2guiinterface.h>
 
 #include <stdexcept>
 #include <algorithm>
 
-#define DEVICE_DRIVER_INFO_STRING "DL Aluma"
+constexpr const char* DEVICE_DRIVER_INFO_STRING = "DL Aluma";
 
-AlumaX2* AlumaX2::GetInstance(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex)
+constexpr const char* KEY_ALUMAX2_ROOT = "AlumaX2";
+constexpr const char* KEY_ALUMAX2_AUTO_FAN_MODE = "AUTO_FAN_MODE";
+constexpr const char* KEY_ALUMAX2_USE_OVERSCAN = "USE_OVERSCAN";
+
+
+AlumaX2* AlumaX2::GetInstance(const int& nISIndex, TheSkyXFacadeForDriversInterface* pTheSkyXForMounts, SleeperInterface* pSleeper, BasicIniUtilInterface* pIniUtilIn, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex)
 {
-	static auto instance = new AlumaX2{ pSleeper, pLoggerIn, pIOMutex };
+	static auto instance = new AlumaX2{ nISIndex, pTheSkyXForMounts, pSleeper, pIniUtilIn, pLoggerIn, pIOMutex };
 	return instance;
 }
 
-AlumaX2::AlumaX2(SleeperInterface* pSleeper, LoggerInterface* pLoggerIn, MutexInterface* pIOMutex) : m_sleeper(pSleeper), m_logger(pLoggerIn), m_mutex(pIOMutex)
+AlumaX2::AlumaX2(
+	const int& nISIndex,
+	TheSkyXFacadeForDriversInterface* pTheSkyXForMounts,
+	SleeperInterface* pSleeper,
+	BasicIniUtilInterface* pIniUtilIn,
+	LoggerInterface* pLoggerIn,
+	MutexInterface* pIOMutex) :
+	m_isIndex(nISIndex),
+	m_theSkyXFacade(pTheSkyXForMounts),
+	m_sleeper(pSleeper),
+	m_iniUtil(pIniUtilIn),
+	m_logger(pLoggerIn),
+	m_mutex(pIOMutex)
 {
 }
 
 AlumaX2::~AlumaX2()
 {
+	delete m_theSkyXFacade;
 	delete m_sleeper;
+	delete m_logger;
 	delete m_mutex;
 }
 
@@ -34,6 +54,8 @@ int AlumaX2::queryAbstraction(const char* pszName, void** ppVal)
 		* ppVal = dynamic_cast<FilterWheelMoveToInterface*>(this);
 	else if (!strcmp(pszName, SubframeInterface_Name))
 		* ppVal = dynamic_cast<SubframeInterface*>(this);
+	else if (!strcmp(pszName, ModalSettingsDialogInterface_Name))
+		* ppVal = dynamic_cast<ModalSettingsDialogInterface*>(this);
 
 	return SB_OK;
 }
@@ -105,8 +127,8 @@ int AlumaX2::CCEstablishLink(enumLPTPort portLPT, const enumWhichCCD& CCD, enumC
 	m_cameraPtr->initialize();
 
 	auto sensor = m_cameraPtr->getSensor(0);
-	HandlePromise(sensor->setSetting(dl::ISensor::AutoFanMode, 1));
-	HandlePromise(sensor->setSetting(dl::ISensor::UseOverscan, 0));
+	HandlePromise(sensor->setSetting(dl::ISensor::AutoFanMode, GetAutoFanMode()));
+	HandlePromise(sensor->setSetting(dl::ISensor::UseOverscan, GetUseOverscan()));
 
 	m_filterWheelPtr = m_cameraPtr->getFW();
 	if (m_filterWheelPtr != nullptr)
@@ -403,7 +425,7 @@ int AlumaX2::CCSetBinnedSubFrame3(const enumCameraIndex & Camera, const enumWhic
 	const auto sensorInfo = sensor->getInfo();
 
 	const dl::TSubframe subFrame
-	{ 
+	{
 		nTop,
 		nLeft,
 		nWidth,
@@ -463,6 +485,77 @@ int AlumaX2::abortFilterWheelMoveTo()
 void AlumaX2::embeddedFilterWheelInit(const char* psFilterWheelSelection)
 {
 
+}
+
+
+//ModalSettingsDialogInterface
+int AlumaX2::initModalSettingsDialog()
+{
+	return SB_OK;
+}
+
+int AlumaX2::execModalSettingsDialog()
+{
+	auto result = SB_OK;
+	X2ModalUIUtil uiUtil{ this, m_theSkyXFacade };
+	auto ui = uiUtil.X2UI();
+	X2GUIExchangeInterface* dx = nullptr;
+	auto bPressedOK = false;
+
+	if (ui == nullptr)
+		return ERR_POINTER;
+
+	if ((result = ui->loadUserInterface("alumax2.ui", deviceType(), m_isIndex)))
+		return result;
+
+	if ((dx = uiUtil.X2DX()) == nullptr)
+		return ERR_POINTER;
+
+	//Initialize UI
+	dx->setChecked("fanModeCheckBox", GetAutoFanMode());
+	dx->setChecked("overscanCheckBox", GetUseOverscan());
+
+
+	//Display the user interface
+	if ((result = ui->exec(bPressedOK)))
+		return result;
+
+	if (bPressedOK)
+	{
+		SetAutoFanMode(dx->isChecked("fanModeCheckBox"));
+		SetUseOverscan(dx->isChecked("overscanCheckBox"));
+	}
+
+
+	return result;
+}
+
+//X2GUIEventInterface
+void AlumaX2::uiEvent(X2GUIExchangeInterface * uiex, const char* pszEvent)
+{
+
+}
+
+int AlumaX2::GetAutoFanMode() const
+{
+	//Enable Auto Fan Mode by default
+	return m_iniUtil->readInt(KEY_ALUMAX2_ROOT, KEY_ALUMAX2_AUTO_FAN_MODE, 1);
+}
+
+void AlumaX2::SetAutoFanMode(const int& autoFanMode) const
+{
+	m_iniUtil->writeInt(KEY_ALUMAX2_ROOT, KEY_ALUMAX2_AUTO_FAN_MODE, autoFanMode);
+}
+
+int AlumaX2::GetUseOverscan() const
+{
+	//Disable Overscan mode by default
+	return m_iniUtil->readInt(KEY_ALUMAX2_ROOT, KEY_ALUMAX2_USE_OVERSCAN, 0);
+}
+
+void AlumaX2::SetUseOverscan(const int& useOverscan) const
+{
+	m_iniUtil->writeInt(KEY_ALUMAX2_ROOT, KEY_ALUMAX2_USE_OVERSCAN, useOverscan);
 }
 
 
